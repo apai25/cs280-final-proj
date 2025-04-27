@@ -1,0 +1,9 @@
+line-length = 88
+fix = true
+
+[format]
+quote-style = "preserve"
+
+[lint]
+select = ["E", "F", "W", "C", "B", "I"]
+ignore = ["T201", "C901"]
