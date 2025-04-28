@@ -2,7 +2,7 @@ line-length = 88
 fix = true
 
 [format]
-quote-style = "preserve"
+quote-style = "double"
 
 [lint]
 select = ["E", "F", "W", "C", "B", "I"]
