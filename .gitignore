@@ -1,0 +1,8 @@
+__pycache__
+.venv
+
+data
+*.pth
+output
+
+.DS_Store
