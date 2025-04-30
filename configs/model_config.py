@@ -4,7 +4,10 @@ from typing import List
 
 @dataclass
 class ModelConfig:
-    input_channels: int  # horizon x 3
+    input_channels: int  # horizon x 3, set by Config
+    action_dim: int  # set by Config
+    loss_fn: str  # set by Config
+
     output_channels: int = 3  # R, G, B
 
     hidden_channels: List[int] = field(default_factory=lambda: [32, 64, 128, 256])
