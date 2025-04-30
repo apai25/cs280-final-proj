@@ -1,6 +1,9 @@
-from dataclasses import dataclass 
-from pathlib import Path 
+from dataclasses import dataclass
+from pathlib import Path
 
-@dataclass 
+
+@dataclass
 class DataConfig:
-    data_path: Path = Path("data/droid_100").resolve()
+    data_path: Path = Path("data").resolve()
+    dataset_name: str = "droid_100"
+    horizon: int = 4
