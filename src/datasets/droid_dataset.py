@@ -45,7 +45,9 @@ class DroidDatasetIterable(IterableDataset):
 
 
 class DroidDatasetIndexed(Dataset):
-    def __init__(self, data_path: str, dataset_name: str = "droid_100", horizon: int = 4):
+    def __init__(
+        self, data_path: str, dataset_name: str = "droid_100", horizon: int = 4
+    ):
         self.horizon = horizon
         self.samples = []
 
@@ -63,11 +65,13 @@ class DroidDatasetIndexed(Dataset):
                 if len(buf) == self.horizon:
                     context_obs = [o for o, _ in buf]
                     context_act = [a for _, a in buf]
-                    self.samples.append({
-                        "context_obs": context_obs,
-                        "context_act": context_act,
-                        "obs": obs,
-                    })
+                    self.samples.append(
+                        {
+                            "context_obs": context_obs,
+                            "context_act": context_act,
+                            "obs": obs,
+                        }
+                    )
 
                 buf.append((obs, act))
 
@@ -77,18 +81,15 @@ class DroidDatasetIndexed(Dataset):
     def __getitem__(self, idx):
         sample = self.samples[idx]
 
-        context_obs = torch.stack([
-            torch.from_numpy(o).permute(2, 0, 1).float() / 255.0
-            for o in sample["context_obs"]
-        ])
-        context_act = torch.stack([
-            torch.from_numpy(a).float()
-            for a in sample["context_act"]
-        ])
+        context_obs = torch.stack(
+            [
+                torch.from_numpy(o).permute(2, 0, 1).float() / 255.0
+                for o in sample["context_obs"]
+            ]
+        )
+        context_act = torch.stack(
+            [torch.from_numpy(a).float() for a in sample["context_act"]]
+        )
         obs = torch.from_numpy(sample["obs"]).permute(2, 0, 1).float() / 255.0
 
-        return {
-            "context_obs": context_obs,
-            "context_act": context_act,
-            "obs": obs
-        }
+        return {"context_obs": context_obs, "context_act": context_act, "obs": obs}

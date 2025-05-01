@@ -79,10 +79,9 @@ class Trainer:
                 x_0 = (
                     torch.randn_like(x_1, device=self.device) * self.cfg.train.noise_std
                 )
-                x_t = (
-                    t.view(t.shape[0], 1, 1, 1) * x_0
-                    + (1 - t).view(t.shape[0], 1, 1, 1) * x_1
-                )
+                x_t = (1 - t).view(t.shape[0], 1, 1, 1) * x_0 + t.view(
+                    t.shape[0], 1, 1, 1
+                ) * x_1
 
                 self.optim.zero_grad()
                 u_t = self.model(
