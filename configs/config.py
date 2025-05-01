@@ -15,5 +15,4 @@ class Config:
         self.model = ModelConfig(
             input_channels=self.data.horizon * 3,
             action_dim=self.data.action_dim,
-            loss_fn=self.train.loss_fn,
         )

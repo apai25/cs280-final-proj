@@ -1,16 +1,9 @@
-from dataclasses import dataclass
-from typing import Optional
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from configs.model_config import ModelConfig
-
-
-@dataclass
-class ModelOutput:
-    pred: torch.Tensor
-    loss: Optional[torch.Tensor] = None
 
 
 class Model(nn.Module):
@@ -19,49 +12,63 @@ class Model(nn.Module):
         self.cfg = cfg
 
         all_channel_inputs = []
+        obs_cond_channels = cfg.input_channels * cfg.horizon
 
         # Define unet arch
         self.unet_enc = nn.ModuleList()
         in_channels = cfg.input_channels
-        for out_channels in cfg.hidden_channels:
+        for i, out_channels in enumerate(cfg.hidden_channels):
+            if i in cfg.obs_cond_stages:
+                in_channels += obs_cond_channels
             all_channel_inputs.append(in_channels)
             self.unet_enc.append(self._down_conv_block(in_channels, out_channels))
             in_channels = out_channels
 
         all_channel_inputs.append(in_channels)
+        if len(self.unet_enc) in cfg.obs_cond_stages:
+            in_channels = in_channels + obs_cond_channels
         self.bottleneck = self._conv_block(in_channels, cfg.bottleneck_channels)
         in_channels = cfg.bottleneck_channels
 
         self.unet_dec = nn.ModuleList()
-        for out_channels in reversed(cfg.hidden_channels):
-            all_channel_inputs.append(in_channels + out_channels)
-            self.unet_dec.append(
-                self._up_conv_block(in_channels + out_channels, out_channels)
-            )
+        for i, out_channels in enumerate(reversed(cfg.hidden_channels)):
+            i_rel = len(cfg.hidden_channels) + 1 + i
+            if i_rel in cfg.obs_cond_stages:
+                in_channels += obs_cond_channels
+            in_channels += out_channels  # residual conn
+            all_channel_inputs.append(in_channels)
+            self.unet_dec.append(self._up_conv_block(in_channels, out_channels))
             in_channels = out_channels
 
-        self.final_conv = nn.Conv2d(in_channels, cfg.output_channels, kernel_size=1)
+        self.final_conv = nn.Conv2d(
+            in_channels, cfg.output_channels, kernel_size=1
+        )  # no conditioning for final conv
 
-        # Conditioning MLPs
+        # Time MLPs
+        self.t_mlps = nn.ModuleList()
+        for s in cfg.t_cond_stages:
+            self.t_mlps.append(self._mlp(1, all_channel_inputs[s]))
+
+        # Action MLPs
         self.act_mlps = nn.ModuleList()
-        for s in cfg.cond_stages:
+        for s in cfg.act_cond_stages:
             self.act_mlps.append(
-                self._mlp(
-                    cfg.action_dim * cfg.input_channels // 3, all_channel_inputs[s]
+                self._mlp(cfg.action_dim * cfg.horizon, all_channel_inputs[s])
+            )
+
+        # Obs Encs
+        self.obs_enc = nn.ModuleList()
+        for _ in cfg.obs_cond_stages:
+            self.obs_enc.append(
+                self._conv_block(
+                    cfg.input_channels * cfg.horizon, cfg.input_channels * cfg.horizon
                 )
             )
 
-        self.t_mlps = nn.ModuleList()
-        for s in cfg.cond_stages:
-            self.t_mlps.append(self._mlp(1, all_channel_inputs[s]))
-
-        self.cond_stage_to_idx = {s: i for i, s in enumerate(cfg.cond_stages)}
-
-        # Loss
-        if self.cfg.loss_fn == "mse":
-            self.loss_fn = nn.MSELoss()
-        else:
-            raise ValueError(f"Unknown loss function: {self.cfg.loss_fn}")
+        # Helpers for forward
+        self.t_cond_stage_to_idx = {s: i for i, s in enumerate(cfg.t_cond_stages)}
+        self.act_cond_stage_to_idx = {s: i for i, s in enumerate(cfg.act_cond_stages)}
+        self.obs_cond_stage_to_idx = {s: i for i, s in enumerate(cfg.obs_cond_stages)}
 
     def _conv_block(self, in_channels: int, out_channels: int) -> nn.Module:
         layers = [
@@ -103,43 +110,87 @@ class Model(nn.Module):
         ]
         return nn.Sequential(*layers)
 
+    def _conditioner(
+        self,
+        x: torch.Tensor,
+        t: torch.Tensor,
+        context_acts: torch.Tensor,
+        context_obs: torch.Tensor,
+        global_idx: int,
+    ) -> torch.Tensor:
+        if global_idx in self.cfg.obs_cond_stages:
+            cond_idx = self.obs_cond_stage_to_idx[global_idx]
+            cond_enc = self.obs_enc[cond_idx]
+            context_obs = cond_enc(context_obs)
+
+            if context_obs.shape[-2:] != x.shape[-2:]:
+                context_obs = F.interpolate(
+                    context_obs, size=x.shape[-2:], mode="bilinear"
+                )
+            x = torch.cat([x, context_obs], dim=1)
+
+        if global_idx in self.cfg.t_cond_stages:
+            cond_idx = self.t_cond_stage_to_idx[global_idx]
+            t_mlp = self.t_mlps[cond_idx]
+            t = t_mlp(t)
+            t = t.view(t.shape[0], t.shape[1], 1, 1)
+            x = x + t
+
+        if global_idx in self.cfg.act_cond_stages:
+            cond_idx = self.act_cond_stage_to_idx[global_idx]
+            act_mlp = self.act_mlps[cond_idx]
+            context_acts = act_mlp(context_acts)
+            context_acts = context_acts.view(
+                context_acts.shape[0], context_acts.shape[1], 1, 1
+            )
+            x = x + context_acts
+        return x
+
     def forward(
         self,
-        imgs: torch.Tensor,
-        acts: torch.Tensor,
+        x_t: torch.Tensor,
         t: torch.Tensor,
-        y: Optional[torch.Tensor],
-    ) -> ModelOutput:
+        context_acts: torch.Tensor,
+        context_obs: torch.Tensor,
+    ) -> torch.Tensor:
         enc_outs = []
+        u_t = x_t
         for i, layer in enumerate(self.unet_enc):
-            if i in self.cfg.cond_stages:
-                idx = self.cond_stage_to_idx[i]
-                act_out = self.act_mlps[idx](acts)
-                t_out = self.t_mlps[idx](t)
-                act_out = act_out.view(act_out.size(0), act_out.size(1), 1, 1)
-                t_out = t_out.view(t_out.size(0), t_out.size(1), 1, 1)
-                imgs = imgs + act_out + t_out
-            imgs = layer(imgs)
-            enc_outs.append(imgs)
+            u_t = self._conditioner(u_t, t, context_acts, context_obs, i)
+            u_t = layer(u_t)
+            enc_outs.append(u_t)
 
-        imgs = self.bottleneck(imgs)
+        u_t = self._conditioner(u_t, t, context_acts, context_obs, len(self.unet_enc))
+        u_t = self.bottleneck(u_t)
 
         for i, layer in enumerate(self.unet_dec):
-            imgs = torch.cat([imgs, enc_outs[-(i + 1)]], dim=1)
             rel_i = i + len(self.unet_enc) + 1
-            if rel_i in self.cfg.cond_stages:
-                idx = self.cond_stage_to_idx[rel_i]
-                act_out = self.act_mlps[idx](acts)
-                t_out = self.t_mlps[idx](t)
-                act_out = act_out.view(act_out.size(0), act_out.size(1), 1, 1)
-                t_out = t_out.view(t_out.size(0), t_out.size(1), 1, 1)
-                imgs = imgs + act_out + t_out
-            imgs = layer(imgs)
 
-        pred = self.final_conv(imgs)
+            skip = enc_outs[-(i + 1)]
+            if skip.shape[-2:] != u_t.shape[-2:]:
+                skip = F.interpolate(skip, size=u_t.shape[-2:], mode="bilinear")
+            u_t = torch.cat([u_t, skip], dim=1)
+            u_t = self._conditioner(u_t, t, context_acts, context_obs, rel_i)
+            u_t = layer(u_t)
 
-        loss = None
-        if y is not None:
-            loss = self.loss_fn(pred, y)
+        u_t = self.final_conv(u_t)
+        u_t = F.interpolate(
+            u_t, size=x_t.shape[-2:], mode="bilinear", align_corners=False
+        )
 
-        return ModelOutput(pred=pred, loss=loss)
+        return u_t
+
+
+if __name__ == "__main__":
+    cfg = ModelConfig(
+        action_dim=4,
+        horizon=4,
+    )
+    model = Model(cfg)
+
+    B = 5
+    x_t = torch.randn(B, 3, 180, 320)
+    t = torch.rand(B, 1)
+    context_acts = torch.randn(B, cfg.action_dim * cfg.horizon)
+    context_obs = torch.randn(B, 3 * cfg.horizon, 180, 320)
+    out = model(x_t, t, context_acts, context_obs)

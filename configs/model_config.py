@@ -4,10 +4,10 @@ from typing import List
 
 @dataclass
 class ModelConfig:
-    input_channels: int  # horizon x 3, set by Config
     action_dim: int  # set by Config
-    loss_fn: str  # set by Config
+    horizon: int  # set by Config
 
+    input_channels: int = 3  # R, G, B
     output_channels: int = 3  # R, G, B
 
     hidden_channels: List[int] = field(default_factory=lambda: [32, 64, 128, 256])
@@ -19,7 +19,6 @@ class ModelConfig:
     pooling_kernel_size: int = 2
     pooling_stride: int = 2
 
-    cond_stages: List[int] = field(
-        default_factory=lambda: [3, 5]
-    )  # enc/dec layer whose input
-    # should be conditioned on diffusion timestep + act (0-indexed)
+    t_cond_stages: List = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6, 7, 8])
+    act_cond_stages: List = field(default_factory=lambda: [3, 5])
+    obs_cond_stages: List = field(default_factory=lambda: [2, 6])
