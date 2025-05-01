@@ -12,7 +12,7 @@ from src.models.model import Model
 class Trainer:
     def __init__(self, cfg: Config):
         self.cfg = cfg
-        self.device = "cpu"
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         # Data
         self.dataset = DroidDataset(

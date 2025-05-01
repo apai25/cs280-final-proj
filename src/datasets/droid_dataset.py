@@ -45,40 +45,29 @@ class DroidDatasetIterable(IterableDataset):
 
 
 class DroidDatasetIndexed(Dataset):
-    def __init__(
-        self, data_path: str, dataset_name: str = "droid_100", horizon: int = 4
-    ):
-        self.data_path = data_path
-        self.dataset_name = dataset_name
+    def __init__(self, data_path: str, dataset_name: str = "droid_100", horizon: int = 4):
         self.horizon = horizon
-
         self.samples = []
-        self.episodes = tfds.as_numpy(
+
+        episodes = tfds.as_numpy(
             tfds.load(dataset_name, data_dir=data_path, split="train", download=False)
         )
 
-        for episode in self.episodes:
+        for episode in episodes:
             buf = deque(maxlen=self.horizon)
 
             for step in episode["steps"]:
-                obs = (
-                    torch.from_numpy(step["observation"]["exterior_image_1_left"])
-                    .permute(2, 0, 1)
-                    .float()
-                    / 255.0
-                )
-                act = torch.from_numpy(step["action"]).float()
+                obs = step["observation"]["exterior_image_1_left"]
+                act = step["action"]
 
                 if len(buf) == self.horizon:
-                    context_obs = torch.stack([o for o, _ in buf], dim=0)
-                    context_act = torch.stack([a for _, a in buf], dim=0)
-                    self.samples.append(
-                        {
-                            "context_obs": context_obs,
-                            "context_act": context_act,
-                            "obs": obs,
-                        }
-                    )
+                    context_obs = [o for o, _ in buf]
+                    context_act = [a for _, a in buf]
+                    self.samples.append({
+                        "context_obs": context_obs,
+                        "context_act": context_act,
+                        "obs": obs,
+                    })
 
                 buf.append((obs, act))
 
@@ -86,4 +75,20 @@ class DroidDatasetIndexed(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        return self.samples[idx]
+        sample = self.samples[idx]
+
+        context_obs = torch.stack([
+            torch.from_numpy(o).permute(2, 0, 1).float() / 255.0
+            for o in sample["context_obs"]
+        ])
+        context_act = torch.stack([
+            torch.from_numpy(a).float()
+            for a in sample["context_act"]
+        ])
+        obs = torch.from_numpy(sample["obs"]).permute(2, 0, 1).float() / 255.0
+
+        return {
+            "context_obs": context_obs,
+            "context_act": context_act,
+            "obs": obs
+        }
