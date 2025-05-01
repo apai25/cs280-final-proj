@@ -13,6 +13,6 @@ class Config:
 
     def __post_init__(self):
         self.model = ModelConfig(
-            input_channels=self.data.horizon * 3,
+            horizon=self.data.horizon,
             action_dim=self.data.action_dim,
         )

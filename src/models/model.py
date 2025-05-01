@@ -1,4 +1,3 @@
-
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -183,12 +182,12 @@ class Model(nn.Module):
 
 if __name__ == "__main__":
     cfg = ModelConfig(
-        action_dim=4,
+        action_dim=7,
         horizon=4,
     )
     model = Model(cfg)
 
-    B = 5
+    B = 32
     x_t = torch.randn(B, 3, 180, 320)
     t = torch.rand(B, 1)
     context_acts = torch.randn(B, cfg.action_dim * cfg.horizon)
