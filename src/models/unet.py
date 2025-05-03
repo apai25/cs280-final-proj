@@ -5,9 +5,9 @@ from torch import nn
 from configs.model_config import ModelConfig
 
 
-class Model(nn.Module):
+class UNet(nn.Module):
     def __init__(self, cfg: ModelConfig):
-        super(Model, self).__init__()
+        super(UNet, self).__init__()
         self.cfg = cfg
 
         all_channel_inputs = []
@@ -116,7 +116,14 @@ class Model(nn.Module):
         context_acts: torch.Tensor,
         context_obs: torch.Tensor,
         global_idx: int,
+        drop_cond: torch.Tensor,
     ) -> torch.Tensor:
+        if drop_cond is not None and drop_cond.any():
+            context_acts = context_acts.clone()
+            context_obs = context_obs.clone()
+            context_acts[drop_cond] = 0
+            context_obs[drop_cond] = 0
+
         if global_idx in self.cfg.obs_cond_stages:
             cond_idx = self.obs_cond_stage_to_idx[global_idx]
             cond_enc = self.obs_enc[cond_idx]
@@ -151,45 +158,33 @@ class Model(nn.Module):
         t: torch.Tensor,
         context_acts: torch.Tensor,
         context_obs: torch.Tensor,
+        drop_cond: torch.Tensor,
     ) -> torch.Tensor:
         enc_outs = []
-        u_t = x_t
+        eps_pred = x_t
         for i, layer in enumerate(self.unet_enc):
-            u_t = self._conditioner(u_t, t, context_acts, context_obs, i)
-            u_t = layer(u_t)
-            enc_outs.append(u_t)
+            eps_pred = self._conditioner(
+                eps_pred, t, context_acts, context_obs, i, drop_cond
+            )
+            eps_pred = layer(eps_pred)
+            enc_outs.append(eps_pred)
 
-        u_t = self._conditioner(u_t, t, context_acts, context_obs, len(self.unet_enc))
-        u_t = self.bottleneck(u_t)
+        eps_pred = self._conditioner(
+            eps_pred, t, context_acts, context_obs, len(self.unet_enc), drop_cond
+        )
+        eps_pred = self.bottleneck(eps_pred)
 
         for i, layer in enumerate(self.unet_dec):
             rel_i = i + len(self.unet_enc) + 1
 
             skip = enc_outs[-(i + 1)]
-            if skip.shape[-2:] != u_t.shape[-2:]:
-                skip = F.interpolate(skip, size=u_t.shape[-2:], mode="bilinear")
-            u_t = torch.cat([u_t, skip], dim=1)
-            u_t = self._conditioner(u_t, t, context_acts, context_obs, rel_i)
-            u_t = layer(u_t)
 
-        u_t = self.final_conv(u_t)
-        u_t = F.interpolate(
-            u_t, size=x_t.shape[-2:], mode="bilinear", align_corners=False
-        )
+            eps_pred = torch.cat([eps_pred, skip], dim=1)
+            eps_pred = self._conditioner(
+                eps_pred, t, context_acts, context_obs, rel_i, drop_cond
+            )
+            eps_pred = layer(eps_pred)
 
-        return u_t
+        eps_pred = self.final_conv(eps_pred)
 
-
-if __name__ == "__main__":
-    cfg = ModelConfig(
-        action_dim=7,
-        horizon=4,
-    )
-    model = Model(cfg)
-
-    B = 32
-    x_t = torch.randn(B, 3, 180, 320)
-    t = torch.rand(B, 1)
-    context_acts = torch.randn(B, cfg.action_dim * cfg.horizon)
-    context_obs = torch.randn(B, 3 * cfg.horizon, 180, 320)
-    out = model(x_t, t, context_acts, context_obs)
+        return eps_pred

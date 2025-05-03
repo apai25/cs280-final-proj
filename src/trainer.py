@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from configs.config import Config
 from src.datasets.droid_dataset import DroidDatasetIndexed as DroidDataset
-from src.models.model import Model
+from src.models.ddpm import DDPM
 
 
 class Trainer:
@@ -16,22 +16,22 @@ class Trainer:
 
         # Data
         self.dataset = DroidDataset(
-            data_path=self.cfg.data.data_dir,
-            dataset_name=self.cfg.data.dataset_name,
-            horizon=self.cfg.data.horizon,
+            data_path=cfg.data.data_dir,
+            dataset_name=cfg.data.dataset_name,
+            horizon=cfg.data.horizon,
+            img_size=cfg.data.img_size,
         )
         self.dataloader = torch.utils.data.DataLoader(
-            self.dataset,  # <-- fixed typo from self.ds
-            batch_size=self.cfg.train.batch_size,
+            self.dataset,
+            batch_size=cfg.train.batch_size,
             shuffle=True,
-            num_workers=self.cfg.train.num_workers,
-            pin_memory=self.cfg.train.pin_memory,
+            num_workers=cfg.train.num_workers,
+            pin_memory=cfg.train.pin_memory,
         )
 
         # Model
-        self.model = Model(self.cfg.model)
-        self.model.to(self.device)
-        self.optim = torch.optim.Adam(self.model.parameters(), lr=self.cfg.train.lr)
+        self.ddpm = DDPM(cfg.model).to(self.device)
+        self.optim = torch.optim.Adam(self.ddpm.parameters(), lr=cfg.train.lr)
         self.loss_fn = torch.nn.MSELoss()
 
         # Init training vars, dirs
@@ -39,20 +39,16 @@ class Trainer:
         self.train_losses = []
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.outputs_dir = os.path.join(self.cfg.train.outputs_dir, timestamp)
+        self.outputs_dir = os.path.join(cfg.train.outputs_dir, timestamp)
         self.checkpoint_dir = os.path.join(self.outputs_dir, "checkpoints")
         os.makedirs(self.checkpoint_dir, exist_ok=True)
 
         # Save configs
         torch.save(
-            vars(self.cfg.train), os.path.join(self.outputs_dir, "trainer_config.pth")
+            vars(cfg.train), os.path.join(self.outputs_dir, "trainer_config.pth")
         )
-        torch.save(
-            vars(self.cfg.model), os.path.join(self.outputs_dir, "model_config.pth")
-        )
-        torch.save(
-            vars(self.cfg.data), os.path.join(self.outputs_dir, "data_config.pth")
-        )
+        torch.save(vars(cfg.model), os.path.join(self.outputs_dir, "model_config.pth"))
+        torch.save(vars(cfg.data), os.path.join(self.outputs_dir, "data_config.pth"))
 
         print(f"Device: {self.device}")
         print(f"Outputs directory: {self.outputs_dir}")
@@ -60,38 +56,41 @@ class Trainer:
     def train(self):
         print("Starting training...")
         for ep in range(self.cfg.train.epochs):
-            self.model.train()
+            self.ddpm.train()
             self.ep = ep + 1
 
             train_loss = 0.0
             for data in tqdm(
                 self.dataloader, desc=f"Epoch {self.ep} / {self.cfg.train.epochs}"
             ):
-                context_obs = data["context_obs"].to(self.device)
-                context_obs = context_obs.view(
-                    context_obs.shape[0], -1, context_obs.shape[3], context_obs.shape[4]
-                )
-                context_acts = data["context_act"].to(self.device)
-                context_acts = context_acts.view(context_acts.shape[0], -1)
-                x_1 = data["obs"].to(self.device)
+                B = data["context_obs"].shape[0]
 
-                t = torch.rand((x_1.shape[0], 1), device=self.device)
-                x_0 = (
-                    torch.randn_like(x_1, device=self.device) * self.cfg.train.noise_std
+                context_obs = (
+                    data["context_obs"]
+                    .to(self.device)
+                    .view(
+                        B,
+                        -1,
+                        data["context_obs"].shape[-2],
+                        data["context_obs"].shape[-1],
+                    )
                 )
-                x_t = (1 - t).view(t.shape[0], 1, 1, 1) * x_0 + t.view(
-                    t.shape[0], 1, 1, 1
-                ) * x_1
+                context_acts = data["context_acts"].to(self.device).view(B, -1)
+                x_0 = data["obs"].to(self.device)
 
+                t_int = torch.randint(
+                    0, self.cfg.train.num_timesteps, (B,), device=self.device
+                )
+
+                eps_pred, eps_true = self.ddpm(
+                    x_0=x_0,
+                    t_int=t_int,
+                    context_acts=context_acts,
+                    context_obs=context_obs,
+                )
+
+                loss = self.loss_fn(eps_pred, eps_true)
                 self.optim.zero_grad()
-                u_t = self.model(
-                    x_t,
-                    t,
-                    context_acts,
-                    context_obs,
-                )
-
-                loss = self.loss_fn(u_t, (x_1 - x_0))
                 loss.backward()
                 self.optim.step()
 
@@ -111,5 +110,5 @@ class Trainer:
 
     def save_model(self):
         checkpoint_path = os.path.join(self.checkpoint_dir, f"model_{self.ep}.pth")
-        torch.save(self.model.state_dict(), checkpoint_path)
+        torch.save(self.ddpm.state_dict(), checkpoint_path)
         print(f"Model saved to {checkpoint_path}")

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Tuple
 
 
 @dataclass
@@ -9,3 +10,4 @@ class DataConfig:
     horizon: int = 4
 
     action_dim: int = 7
+    img_size: Tuple[int, int] = (64, 64)
