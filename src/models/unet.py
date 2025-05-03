@@ -42,6 +42,7 @@ class UNet(nn.Module):
         self.final_conv = nn.Conv2d(
             in_channels, cfg.output_channels, kernel_size=1
         )  # no conditioning for final conv
+        self.final_activation = nn.Tanh()
 
         # Time MLPs
         self.t_mlps = nn.ModuleList()
@@ -185,6 +186,6 @@ class UNet(nn.Module):
             )
             eps_pred = layer(eps_pred)
 
-        eps_pred = self.final_conv(eps_pred)
+        eps_pred = self.final_activation(self.final_conv(eps_pred))
 
         return eps_pred
