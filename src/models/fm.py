@@ -43,8 +43,9 @@ class FM(nn.Module):
 
         x_t = torch.randn(B, self.cfg.input_channels, H, W, device=context_acts.device)
 
-        for t in torch.linspace(0, 1, num_ts):
-            drop_cond_mask = torch.ones((B,), device=context_acts.device)
+        for t in torch.linspace(0, 1, num_ts, device=context_acts.device):
+            t = t.unsqueeze(0).expand(B, 1)
+            drop_cond_mask = torch.ones((B,), device=context_acts.device, dtype=torch.bool)
             if guidance_scale is None:
                 u_t = self.unet(x_t, t, context_acts, context_obs, ~drop_cond_mask)
             else:

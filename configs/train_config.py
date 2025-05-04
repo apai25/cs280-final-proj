@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class TrainConfig:
-    batch_size: int = 32
+    batch_size: int = 16
     epochs: int = 50
     init_lr: float = 1e-3
     min_lr: float = 1e-5

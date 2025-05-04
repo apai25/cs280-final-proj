@@ -11,8 +11,8 @@ class ModelConfig:
     input_channels: int = 3  # R, G, B
     output_channels: int = 3  # R, G, B
 
-    hidden_channels: List[int] = field(default_factory=lambda: [128, 256, 512])
-    bottleneck_channels: int = 1024
+    hidden_channels: List[int] = field(default_factory=lambda: [128, 256])
+    bottleneck_channels: int = 512
 
     dropout: float = 0.0
     batch_norm: bool = True
