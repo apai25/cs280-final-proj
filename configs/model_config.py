@@ -11,8 +11,8 @@ class ModelConfig:
     input_channels: int = 3  # R, G, B
     output_channels: int = 3  # R, G, B
 
-    hidden_channels: List[int] = field(default_factory=lambda: [32, 64, 128, 256])
-    bottleneck_channels: int = 512
+    hidden_channels: List[int] = field(default_factory=lambda: [32, 64, 128])
+    bottleneck_channels: int = 256
 
     dropout: float = 0.0
     batch_norm: bool = False
@@ -20,9 +20,9 @@ class ModelConfig:
     pooling_kernel_size: int = 2
     pooling_stride: int = 2
 
-    t_cond_stages: List = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6, 7, 8])
-    act_cond_stages: List = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6, 7, 8])
-    obs_cond_stages: List = field(default_factory=lambda: [0, 1, 4, 7])
+    t_cond_stages: List = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6])
+    act_cond_stages: List = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6])
+    obs_cond_stages: List = field(default_factory=lambda: [0, 1, 4])
 
     time_embed_dim: int = 128
     

@@ -31,7 +31,12 @@ class Trainer:
 
         # Model
         self.ddpm = DDPM(cfg.model).to(self.device)
-        self.optim = torch.optim.Adam(self.ddpm.parameters(), lr=cfg.train.lr)
+        self.optim = torch.optim.Adam(self.ddpm.parameters(), lr=cfg.train.init_lr)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.optim,
+            T_max=self.cfg.train.epochs * len(self.dataloader),
+            eta_min=cfg.train.min_lr,
+        )
         self.loss_fn = torch.nn.MSELoss()
 
         # Init training vars, dirs
@@ -79,7 +84,7 @@ class Trainer:
                 x_0 = data["obs"].to(self.device)
 
                 t_int = torch.randint(
-                    0, self.cfg.train.num_timesteps, (B,), device=self.device
+                    0, self.cfg.model.num_timesteps, (B,), device=self.device
                 )
 
                 eps_pred, eps_true = self.ddpm(
@@ -92,7 +97,9 @@ class Trainer:
                 loss = self.loss_fn(eps_pred, eps_true)
                 self.optim.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.ddpm.parameters(), 1.0)
                 self.optim.step()
+                self.scheduler.step()
 
                 train_loss += loss.item()
 
@@ -100,6 +107,9 @@ class Trainer:
             self.train_losses.append(avg_loss)
 
             print(f"Epoch {self.ep} - Train Loss: {avg_loss:.4f}")
+            print(f"eps pred std: {eps_pred.std():.4f}")
+            print(f"eps true std: {eps_true.std():.4f}")
+            print(f"Learning rate: {self.scheduler.get_last_lr()[0]:.6f}")
             self.save_model()
 
         torch.save(

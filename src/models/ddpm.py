@@ -30,7 +30,8 @@ class DDPM(nn.Module):
         eps = torch.randn_like(x_0)
         alpha_bar_t = self.ddpm_alpha_bars[t_int].view(x_0.shape[0], 1, 1, 1)
         x_t = torch.sqrt(alpha_bar_t) * x_0 + torch.sqrt(1.0 - alpha_bar_t) * eps
-        t = (t_int.float() / (self.cfg.num_timesteps - 1)).unsqueeze(1)
+        t = t_int.float().unsqueeze(1)
+        
         drop_uncond = torch.rand((x_0.shape[0],), device=x_0.device) < self.cfg.p_uncond
 
         return self.unet(x_t, t, context_acts, context_obs, drop_uncond), eps
@@ -52,7 +53,7 @@ class DDPM(nn.Module):
 
         for i in reversed(range(num_steps)):
             t_int = torch.full((B,), i, device=context_acts.device)
-            t = (t_int.float() / (num_steps - 1)).unsqueeze(1)
+            t = t_int.float().unsqueeze(1)
 
             alpha_t = self.ddpm_alphas[i]
             alpha_bar_t = self.ddpm_alpha_bars[i]
