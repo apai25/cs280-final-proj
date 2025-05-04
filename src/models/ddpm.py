@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Optional, Tuple
 
 import torch
 from torch import nn
@@ -31,7 +31,7 @@ class DDPM(nn.Module):
         alpha_bar_t = self.ddpm_alpha_bars[t_int].view(x_0.shape[0], 1, 1, 1)
         x_t = torch.sqrt(alpha_bar_t) * x_0 + torch.sqrt(1.0 - alpha_bar_t) * eps
         t = t_int.float().unsqueeze(1)
-        
+
         drop_uncond = torch.rand((x_0.shape[0],), device=x_0.device) < self.cfg.p_uncond
 
         return self.unet(x_t, t, context_acts, context_obs, drop_uncond), eps
@@ -42,14 +42,14 @@ class DDPM(nn.Module):
         context_acts: torch.Tensor,
         context_obs: torch.Tensor,
         num_steps: int,
-        guidance_scale: float,
+        guidance_scale: Optional[float],
         img_wh: tuple[int, int],
     ) -> torch.Tensor:
         self.unet.eval()
         B = context_acts.shape[0]
         H, W = img_wh
 
-        x = torch.randn(B, self.cfg.input_channels, H, W, device=context_acts.device)
+        x_t = torch.randn(B, self.cfg.input_channels, H, W, device=context_acts.device)
 
         for i in reversed(range(num_steps)):
             t_int = torch.full((B,), i, device=context_acts.device)
@@ -58,26 +58,37 @@ class DDPM(nn.Module):
             alpha_t = self.ddpm_alphas[i]
             alpha_bar_t = self.ddpm_alpha_bars[i]
             beta_t = self.ddpm_betas[i]
+            alpha_bar_t_1 = (
+                self.ddpm_alpha_bars[i - 1]
+                if i > 0
+                else torch.tensor(1.0, device=x_t.device, dtype=x_t.dtype)
+            )
 
-            drop = torch.ones((B,), device=context_acts.device, dtype=torch.bool)
             no_drop = torch.zeros((B,), device=context_acts.device, dtype=torch.bool)
-            eps_cond = self.unet(x, t, context_acts, context_obs, drop_cond=no_drop)
-            eps_uncond = self.unet(x, t, context_acts, context_obs, drop_cond=drop)
-            eps_pred = (
-                1 + guidance_scale
-            ) * eps_cond - guidance_scale * eps_uncond
+            eps_cond = self.unet(x_t, t, context_acts, context_obs, drop_cond=no_drop)
 
-            coef1 = 1 / torch.sqrt(alpha_t)
-            coef2 = beta_t / torch.sqrt(1 - alpha_bar_t)
+            if guidance_scale is not None:
+                drop = torch.ones((B,), device=context_acts.device, dtype=torch.bool)
+                eps_uncond = self.unet(
+                    x_t, t, context_acts, context_obs, drop_cond=drop
+                )
+                eps_pred = (1 + guidance_scale) * eps_cond - guidance_scale * eps_uncond
+            else:
+                eps_pred = eps_cond
 
-            x = coef1 * (x - coef2 * eps_pred)
+            coef1 = torch.sqrt(alpha_bar_t_1) * beta_t / (1 - alpha_bar_t)
+            x_0_hat = (1 / torch.sqrt(alpha_bar_t)) * (
+                x_t - torch.sqrt(1 - alpha_bar_t) * eps_pred
+            )
 
-            if i > 0:
-                noise = torch.randn_like(x)
-                sigma = torch.sqrt(beta_t)
-                x += sigma * noise
+            coef2 = torch.sqrt(alpha_t) * (1 - alpha_bar_t_1) / (1 - alpha_bar_t)
 
-        return x.clamp(-1, 1)
+            coef3 = torch.sqrt(beta_t)
+            z = torch.randn_like(x_t) if i > 0 else torch.zeros_like(x_t)
+
+            x_t = coef1 * x_0_hat + coef2 * x_t + coef3 * z
+
+        return x_t.clamp(-1, 1)
 
     def _ddpm_schedule(self) -> dict:
         assert self.cfg.beta1 < self.cfg.beta2 < 1.0, "Expect beta1 < beta2 < 1.0."

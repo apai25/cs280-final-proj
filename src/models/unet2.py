@@ -46,7 +46,9 @@ class UNet(nn.Module):
         # Time MLPs
         self.t_mlps = nn.ModuleList()
         for s in cfg.t_cond_stages:
-            self.t_mlps.append(self._mlp(1, all_channel_inputs[s]))
+            self.t_mlps.append(
+                self._mlp(self.cfg.time_embed_dim, all_channel_inputs[s])
+            )
 
         # Action MLPs
         self.act_mlps = nn.ModuleList()
@@ -109,6 +111,16 @@ class UNet(nn.Module):
         ]
         return nn.Sequential(*layers)
 
+    def _sin_embed(self, t: torch.Tensor) -> torch.Tensor:
+        half_dim = self.cfg.time_embed_dim // 2
+        emb = torch.exp(
+            torch.arange(half_dim, device=t.device)
+            * -(torch.log(torch.tensor(10000.0)) / (half_dim - 1))
+        )
+        emb = t * emb.unsqueeze(0)
+        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=-1)
+        return emb
+
     def _conditioner(
         self,
         x: torch.Tensor,
@@ -116,13 +128,13 @@ class UNet(nn.Module):
         context_acts: torch.Tensor,
         context_obs: torch.Tensor,
         global_idx: int,
-        drop_cond_mask: torch.Tensor,
+        drop_cond: torch.Tensor,
     ) -> torch.Tensor:
-        if drop_cond_mask.any():
+        if drop_cond is not None and drop_cond.any():
             context_acts = context_acts.clone()
             context_obs = context_obs.clone()
-            context_acts[drop_cond_mask] = 0
-            context_obs[drop_cond_mask] = 0
+            context_acts[drop_cond] = 0
+            context_obs[drop_cond] = 0
 
         if global_idx in self.cfg.obs_cond_stages:
             cond_idx = self.obs_cond_stage_to_idx[global_idx]
@@ -138,8 +150,7 @@ class UNet(nn.Module):
         if global_idx in self.cfg.t_cond_stages:
             cond_idx = self.t_cond_stage_to_idx[global_idx]
             t_mlp = self.t_mlps[cond_idx]
-            print(t.shape)
-            t = t_mlp(t)
+            t = t_mlp(self._sin_embed(t))
             t = t.view(t.shape[0], t.shape[1], 1, 1)
             x = x + t
 
@@ -159,19 +170,19 @@ class UNet(nn.Module):
         t: torch.Tensor,
         context_acts: torch.Tensor,
         context_obs: torch.Tensor,
-        drop_cond_mask: torch.Tensor,
+        drop_cond: torch.Tensor,
     ) -> torch.Tensor:
         enc_outs = []
         eps_pred = x_t
         for i, layer in enumerate(self.unet_enc):
             eps_pred = self._conditioner(
-                eps_pred, t, context_acts, context_obs, i, drop_cond_mask
+                eps_pred, t, context_acts, context_obs, i, drop_cond
             )
             eps_pred = layer(eps_pred)
             enc_outs.append(eps_pred)
 
         eps_pred = self._conditioner(
-            eps_pred, t, context_acts, context_obs, len(self.unet_enc), drop_cond_mask
+            eps_pred, t, context_acts, context_obs, len(self.unet_enc), drop_cond
         )
         eps_pred = self.bottleneck(eps_pred)
 
@@ -182,7 +193,7 @@ class UNet(nn.Module):
 
             eps_pred = torch.cat([eps_pred, skip], dim=1)
             eps_pred = self._conditioner(
-                eps_pred, t, context_acts, context_obs, rel_i, drop_cond_mask
+                eps_pred, t, context_acts, context_obs, rel_i, drop_cond
             )
             eps_pred = layer(eps_pred)
 

@@ -6,7 +6,9 @@ from tqdm import tqdm
 
 from configs.config import Config
 from src.datasets.droid_dataset import DroidDatasetIndexed as DroidDataset
-from src.models.ddpm import DDPM
+
+# from src.models.ddpm import DDPM
+from src.models.fm import FM
 
 
 class Trainer:
@@ -30,8 +32,8 @@ class Trainer:
         )
 
         # Model
-        self.ddpm = DDPM(cfg.model).to(self.device)
-        self.optim = torch.optim.Adam(self.ddpm.parameters(), lr=cfg.train.init_lr)
+        self.fm = FM(cfg.model).to(self.device)
+        self.optim = torch.optim.Adam(self.fm.parameters(), lr=cfg.train.init_lr)
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             self.optim,
             T_max=self.cfg.train.epochs * len(self.dataloader),
@@ -61,7 +63,7 @@ class Trainer:
     def train(self):
         print("Starting training...")
         for ep in range(self.cfg.train.epochs):
-            self.ddpm.train()
+            self.fm.train()
             self.ep = ep + 1
 
             train_loss = 0.0
@@ -81,23 +83,23 @@ class Trainer:
                     )
                 )
                 context_acts = data["context_acts"].to(self.device).view(B, -1)
-                x_0 = data["obs"].to(self.device)
+                x_1 = data["obs"].to(self.device)
+                x_0 = torch.randn_like(x_1)
 
-                t_int = torch.randint(
-                    0, self.cfg.model.num_timesteps, (B,), device=self.device
-                )
+                t = torch.rand((B, 1), device=self.device)
 
-                eps_pred, eps_true = self.ddpm(
+                u_t = self.fm(
+                    x_1=x_1,
                     x_0=x_0,
-                    t_int=t_int,
+                    t=t,
                     context_acts=context_acts,
                     context_obs=context_obs,
                 )
 
-                loss = self.loss_fn(eps_pred, eps_true)
+                loss = self.loss_fn(u_t, x_1 - x_0)
                 self.optim.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.ddpm.parameters(), 1.0)
+                torch.nn.utils.clip_grad_norm_(self.fm.parameters(), 1.0)
                 self.optim.step()
                 self.scheduler.step()
 
@@ -107,8 +109,6 @@ class Trainer:
             self.train_losses.append(avg_loss)
 
             print(f"Epoch {self.ep} - Train Loss: {avg_loss:.4f}")
-            print(f"eps pred std: {eps_pred.std():.4f}")
-            print(f"eps true std: {eps_true.std():.4f}")
             print(f"Learning rate: {self.scheduler.get_last_lr()[0]:.6f}")
             self.save_model()
 
@@ -120,5 +120,5 @@ class Trainer:
 
     def save_model(self):
         checkpoint_path = os.path.join(self.checkpoint_dir, f"model_{self.ep}.pth")
-        torch.save(self.ddpm.state_dict(), checkpoint_path)
+        torch.save(self.fm.state_dict(), checkpoint_path)
         print(f"Model saved to {checkpoint_path}")
