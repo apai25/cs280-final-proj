@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 
 
-class DroidDatasetIndexed(Dataset):
+class DroidDataset(Dataset):
     def __init__(
         self,
         data_path: str,
