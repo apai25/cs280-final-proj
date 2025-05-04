@@ -11,4 +11,4 @@ class DataConfig:
 
     action_dim: int = 7
     img_size: Tuple[int, int] = (64, 64)
-    img_channels: int = 3 # R, G, B
+    img_channels: int = 3  # R, G, B

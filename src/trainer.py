@@ -6,7 +6,6 @@ from tqdm import tqdm
 
 from configs.config import Config
 from src.datasets.droid_dataset import DroidDataset
-
 from src.models.fm import FM
 
 

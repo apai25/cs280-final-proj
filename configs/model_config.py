@@ -6,7 +6,7 @@ from typing import List
 class ModelConfig:
     action_dim: int  # set by Config
     horizon: int  # set by Config
-    img_channels: int # set by Config
+    img_channels: int  # set by Config
 
     # UNet config
     hidden_channels: List[int] = field(default_factory=lambda: [128, 256, 512])

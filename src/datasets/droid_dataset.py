@@ -3,46 +3,7 @@ from collections import deque
 import tensorflow_datasets as tfds
 import torch
 import torch.nn.functional as F
-from torch.utils.data import Dataset, IterableDataset
-
-
-class DroidDatasetIterable(IterableDataset):
-    def __init__(
-        self, data_path: str, dataset_name: str = "droid_100", horizon: int = 4
-    ):
-        self.data_path = data_path
-        self.dataset_name = dataset_name
-        self.horizon = horizon
-
-        self.episodes = tfds.as_numpy(
-            tfds.load(dataset_name, data_dir=data_path, split="train", download=False)
-        )
-
-    def __iter__(self):
-        for episode in self.episodes:
-            buf = deque(maxlen=self.horizon)
-
-            for step in episode["steps"]:
-                obs = (
-                    torch.from_numpy(step["observation"]["wrist_image_left"])
-                    .permute(2, 0, 1)
-                    .float()
-                    / 255.0
-                )
-                act = torch.from_numpy(step["action"]).float()
-
-                if len(buf) == self.horizon:
-                    context = list(buf)
-                    context_obs = torch.stack([obs for obs, _ in context], dim=0)
-                    context_act = torch.stack([act for _, act in context], dim=0)
-
-                    yield {
-                        "context_obs": context_obs,
-                        "context_act": context_act,
-                        "obs": obs,
-                    }
-
-                buf.append((obs, act))
+from torch.utils.data import Dataset
 
 
 class DroidDatasetIndexed(Dataset):
