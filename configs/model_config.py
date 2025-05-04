@@ -11,11 +11,11 @@ class ModelConfig:
     input_channels: int = 3  # R, G, B
     output_channels: int = 3  # R, G, B
 
-    hidden_channels: List[int] = field(default_factory=lambda: [32, 64, 128])
-    bottleneck_channels: int = 256
+    hidden_channels: List[int] = field(default_factory=lambda: [128, 256, 512])
+    bottleneck_channels: int = 1024
 
     dropout: float = 0.0
-    batch_norm: bool = False
+    batch_norm: bool = True
 
     pooling_kernel_size: int = 2
     pooling_stride: int = 2
