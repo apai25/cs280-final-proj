@@ -11,6 +11,7 @@ class DroidDataset(Dataset):
         self,
         data_path: str,
         dataset_name: str = "droid_100",
+        camera: str = "exterior_image_1_left",
         horizon: int = 4,
         img_size: tuple[int, int] = (64, 64),
     ):
@@ -26,7 +27,7 @@ class DroidDataset(Dataset):
             buf = deque(maxlen=self.horizon)
 
             for step in episode["steps"]:
-                obs = step["observation"]["wrist_image_left"]
+                obs = step["observation"][camera]
                 act = step["action"]
 
                 if len(buf) == self.horizon:

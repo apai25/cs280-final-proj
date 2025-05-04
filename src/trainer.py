@@ -18,6 +18,7 @@ class Trainer:
         self.dataset = DroidDataset(
             data_path=cfg.data.data_dir,
             dataset_name=cfg.data.dataset_name,
+            camera=cfg.data.camera,
             horizon=cfg.data.horizon,
             img_size=cfg.data.img_size,
         )

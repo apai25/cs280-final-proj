@@ -7,6 +7,7 @@ from typing import Tuple
 class DataConfig:
     data_dir: Path = Path("data").resolve()
     dataset_name: str = "droid_100"
+    camera: str = "exterior_image_1_left"
     horizon: int = 4
 
     action_dim: int = 7

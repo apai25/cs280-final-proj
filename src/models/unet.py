@@ -40,7 +40,7 @@ class UNet(nn.Module):
             in_channels = out_channels
 
         self.final_conv = nn.Conv2d(
-            in_channels, cfg.output_channels, kernel_size=1
+            in_channels, cfg.img_channels, kernel_size=1
         )  # no conditioning for final conv
 
         # Time MLPs
