@@ -109,7 +109,6 @@ class Trainer:
             self.train_losses.append(avg_loss)
 
             print(f"Epoch {self.ep} - Train Loss: {avg_loss:.4f}")
-            print(f"Learning rate: {self.scheduler.get_last_lr()[0]:.6f}")
             self.save_model()
 
         torch.save(

@@ -138,7 +138,6 @@ class UNet(nn.Module):
         if global_idx in self.cfg.t_cond_stages:
             cond_idx = self.t_cond_stage_to_idx[global_idx]
             t_mlp = self.t_mlps[cond_idx]
-            print(t.shape)
             t = t_mlp(t)
             t = t.view(t.shape[0], t.shape[1], 1, 1)
             x = x + t
