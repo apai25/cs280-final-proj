@@ -5,9 +5,8 @@ import torch
 from tqdm import tqdm
 
 from configs.config import Config
-from src.datasets.droid_dataset import DroidDatasetIndexed as DroidDataset
+from src.datasets.droid_dataset import DroidDataset
 
-# from src.models.ddpm import DDPM
 from src.models.fm import FM
 
 
