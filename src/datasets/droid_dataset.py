@@ -85,7 +85,7 @@ class DroidDatasetIndexed(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        sample = self.samples[0]
+        sample = self.samples[idx]
 
         context_obs = torch.stack(
             [
