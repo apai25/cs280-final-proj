@@ -11,11 +11,11 @@ class UNet(nn.Module):
         self.cfg = cfg
 
         all_channel_inputs = []
-        obs_cond_channels = cfg.input_channels * cfg.horizon
+        obs_cond_channels = cfg.img_channels * cfg.horizon
 
         # Define unet arch
         self.unet_enc = nn.ModuleList()
-        in_channels = cfg.input_channels
+        in_channels = cfg.img_channels
         for i, out_channels in enumerate(cfg.hidden_channels):
             if i in cfg.obs_cond_stages:
                 in_channels += obs_cond_channels
@@ -60,7 +60,7 @@ class UNet(nn.Module):
         for _ in cfg.obs_cond_stages:
             self.obs_enc.append(
                 self._conv_block(
-                    cfg.input_channels * cfg.horizon, cfg.input_channels * cfg.horizon
+                    cfg.img_channels * cfg.horizon, cfg.img_channels * cfg.horizon
                 )
             )
 

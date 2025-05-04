@@ -41,7 +41,7 @@ class FM(nn.Module):
         B = context_acts.shape[0]
         H, W = img_wh
 
-        x_t = torch.randn(B, self.cfg.input_channels, H, W, device=context_acts.device)
+        x_t = torch.randn(B, self.cfg.img_channels, H, W, device=context_acts.device)
 
         for t in torch.linspace(0, 1, num_ts, device=context_acts.device):
             t = t.unsqueeze(0).expand(B, 1)

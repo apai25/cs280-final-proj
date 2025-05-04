@@ -15,4 +15,5 @@ class Config:
         self.model = ModelConfig(
             horizon=self.data.horizon,
             action_dim=self.data.action_dim,
+            img_channels=self.data.img_channels,
         )

@@ -6,13 +6,11 @@ from typing import List
 class ModelConfig:
     action_dim: int  # set by Config
     horizon: int  # set by Config
+    img_channels: int # set by Config
 
     # UNet config
-    input_channels: int = 3  # R, G, B
-    output_channels: int = 3  # R, G, B
-
-    hidden_channels: List[int] = field(default_factory=lambda: [128, 256])
-    bottleneck_channels: int = 512
+    hidden_channels: List[int] = field(default_factory=lambda: [128, 256, 512])
+    bottleneck_channels: int = 1024
 
     dropout: float = 0.0
     batch_norm: bool = True
@@ -21,7 +19,7 @@ class ModelConfig:
     pooling_stride: int = 2
 
     t_cond_stages: List = field(default_factory=lambda: [4])
-    act_cond_stages: List = field(default_factory=lambda: [4])
+    act_cond_stages: List = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6])
     obs_cond_stages: List = field(default_factory=lambda: [0])
 
     # FM Config
