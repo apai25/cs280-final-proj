@@ -23,9 +23,9 @@ class UNet(nn.Module):
             self.unet_enc.append(self._down_conv_block(in_channels, out_channels))
             in_channels = out_channels
 
-        all_channel_inputs.append(in_channels)
         if len(self.unet_enc) in cfg.obs_cond_stages:
-            in_channels = in_channels + obs_cond_channels
+            in_channels += obs_cond_channels
+        all_channel_inputs.append(in_channels)
         self.bottleneck = self._conv_block(in_channels, cfg.bottleneck_channels)
         in_channels = cfg.bottleneck_channels
 

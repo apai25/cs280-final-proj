@@ -14,7 +14,7 @@ class ModelConfig:
     hidden_channels: List[int] = field(default_factory=lambda: [32, 64, 128, 256])
     bottleneck_channels: int = 512
 
-    dropout: float = 0.1
+    dropout: float = 0.0
     batch_norm: bool = False
 
     pooling_kernel_size: int = 2
@@ -26,7 +26,7 @@ class ModelConfig:
 
     time_embed_dim: int = 128
     
-    
+
     # DDPM Config
     num_timesteps: int = 1000
     beta1: float = 1e-4
