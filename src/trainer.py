@@ -98,7 +98,7 @@ class Trainer:
                 loss = self.loss_fn(u_t, x_1 - x_0)
                 self.optim.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.fm.parameters(), 1.0)
+                torch.nn.utils.clip_grad_norm_(self.fm.parameters(), self.cfg.train.grad_clip)
                 self.optim.step()
                 self.scheduler.step()
 
