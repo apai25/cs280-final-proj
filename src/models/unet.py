@@ -47,7 +47,7 @@ class UNet(nn.Module):
         # Time MLPs
         self.t_mlps = nn.ModuleList()
         for s in cfg.t_cond_stages:
-            self.t_mlps.append(self._mlp(1, all_channel_inputs[s]))
+            self.t_mlps.append(self._mlp(self.cfg.time_embed_dim, all_channel_inputs[s]))
 
         # Action MLPs
         self.act_mlps = nn.ModuleList()
@@ -109,6 +109,13 @@ class UNet(nn.Module):
             nn.Linear(out_dim, out_dim),
         ]
         return nn.Sequential(*layers)
+    
+    def _sin_embed(self, t: torch.Tensor) -> torch.Tensor:
+        half_dim = self.cfg.time_embed_dim // 2
+        emb = torch.exp(torch.arange(half_dim, device=t.device) * -(torch.log(torch.tensor(10000.0)) / (half_dim - 1)))
+        emb = t * emb.unsqueeze(0)
+        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=-1)
+        return emb
 
     def _conditioner(
         self,
@@ -139,7 +146,7 @@ class UNet(nn.Module):
         if global_idx in self.cfg.t_cond_stages:
             cond_idx = self.t_cond_stage_to_idx[global_idx]
             t_mlp = self.t_mlps[cond_idx]
-            t = t_mlp(t)
+            t = t_mlp(self._sin_embed(t))
             t = t.view(t.shape[0], t.shape[1], 1, 1)
             x = x + t
 
