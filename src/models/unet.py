@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from configs.model_config import ModelConfig
+from src.models.blocks import MLP, ConvBlock, DownConvBlock, UpConvBlock
 
 
 class UNet(nn.Module):
@@ -20,13 +21,17 @@ class UNet(nn.Module):
             if i in cfg.obs_cond_stages:
                 in_channels += obs_cond_channels
             all_channel_inputs.append(in_channels)
-            self.unet_enc.append(self._down_conv_block(in_channels, out_channels))
+            self.unet_enc.append(
+                DownConvBlock(in_channels, out_channels, cfg.pooling_kernel_size, cfg.pooling_stride, cfg.dropout, cfg.batch_norm)
+            )
             in_channels = out_channels
 
         if len(self.unet_enc) in cfg.obs_cond_stages:
             in_channels += obs_cond_channels
         all_channel_inputs.append(in_channels)
-        self.bottleneck = self._conv_block(in_channels, cfg.bottleneck_channels)
+        self.bottleneck = ConvBlock(
+            in_channels, cfg.bottleneck_channels, cfg.dropout, cfg.batch_norm
+        )
         in_channels = cfg.bottleneck_channels
 
         self.unet_dec = nn.ModuleList()
@@ -36,78 +41,32 @@ class UNet(nn.Module):
                 in_channels += obs_cond_channels
             in_channels += out_channels  # residual conn
             all_channel_inputs.append(in_channels)
-            self.unet_dec.append(self._up_conv_block(in_channels, out_channels))
+            self.unet_dec.append(
+                UpConvBlock(in_channels, out_channels, cfg.pooling_kernel_size, cfg.pooling_stride, cfg.dropout, cfg.batch_norm)
+            )
             in_channels = out_channels
 
         self.final_conv = nn.Conv2d(
             in_channels, cfg.img_channels, kernel_size=1
         )  # no conditioning for final conv
 
-        # Time MLPs
-        self.t_mlps = nn.ModuleList()
-        for s in cfg.t_cond_stages:
-            self.t_mlps.append(self._mlp(1, all_channel_inputs[s]))
-
-        # Action MLPs
-        self.act_mlps = nn.ModuleList()
-        for s in cfg.act_cond_stages:
-            self.act_mlps.append(
-                self._mlp(cfg.action_dim * cfg.horizon, all_channel_inputs[s])
-            )
-
-        # Obs Encs
-        self.obs_enc = nn.ModuleList()
-        for _ in cfg.obs_cond_stages:
-            self.obs_enc.append(
-                self._conv_block(
-                    cfg.img_channels * cfg.horizon, cfg.img_channels * cfg.horizon
-                )
-            )
+        # Conditioning Layers
+        self.t_mlps = nn.ModuleList(
+            MLP(1, all_channel_inputs[s]) for s in cfg.t_cond_stages
+        )
+        self.act_mlps = nn.ModuleList(
+            MLP(cfg.action_dim * cfg.horizon, all_channel_inputs[s])
+            for s in cfg.act_cond_stages
+        )
+        self.obs_encs = nn.ModuleList(
+            ConvBlock(obs_cond_channels, obs_cond_channels, cfg.dropout, cfg.batch_norm)
+            for _ in cfg.obs_cond_stages
+        )
 
         # Helpers for forward
         self.t_cond_stage_to_idx = {s: i for i, s in enumerate(cfg.t_cond_stages)}
         self.act_cond_stage_to_idx = {s: i for i, s in enumerate(cfg.act_cond_stages)}
         self.obs_cond_stage_to_idx = {s: i for i, s in enumerate(cfg.obs_cond_stages)}
-
-    def _conv_block(self, in_channels: int, out_channels: int) -> nn.Module:
-        layers = [
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels) if self.cfg.batch_norm else nn.Identity(),
-            nn.SiLU(inplace=True),
-            nn.Dropout(self.cfg.dropout),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels) if self.cfg.batch_norm else nn.Identity(),
-            nn.SiLU(inplace=True),
-        ]
-        return nn.Sequential(*layers)
-
-    def _up_conv_block(self, in_channels: int, out_channels: int) -> nn.Module:
-        layers = [
-            nn.ConvTranspose2d(
-                in_channels,
-                in_channels,
-                kernel_size=self.cfg.pooling_kernel_size,
-                stride=self.cfg.pooling_stride,
-            ),
-        ] + list(self._conv_block(in_channels, out_channels))
-        return nn.Sequential(*layers)
-
-    def _down_conv_block(self, in_channels: int, out_channels: int) -> nn.Module:
-        layers = list(self._conv_block(in_channels, out_channels)) + [
-            nn.MaxPool2d(
-                kernel_size=self.cfg.pooling_kernel_size,
-                stride=self.cfg.pooling_stride,
-            )
-        ]
-        return nn.Sequential(*layers)
-
-    def _mlp(self, in_dim: int, out_dim: int) -> nn.Module:
-        layers = [
-            nn.Linear(in_dim, out_dim),
-            nn.SiLU(inplace=True),
-            nn.Linear(out_dim, out_dim),
-        ]
-        return nn.Sequential(*layers)
 
     def _conditioner(
         self,
@@ -126,7 +85,7 @@ class UNet(nn.Module):
 
         if global_idx in self.cfg.obs_cond_stages:
             cond_idx = self.obs_cond_stage_to_idx[global_idx]
-            cond_enc = self.obs_enc[cond_idx]
+            cond_enc = self.obs_encs[cond_idx]
             context_obs = cond_enc(context_obs)
 
             if context_obs.shape[-2:] != x.shape[-2:]:
