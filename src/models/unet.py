@@ -42,7 +42,7 @@ class UNet(nn.Module):
             in_channels += out_channels  # residual conn
             all_channel_inputs.append(in_channels)
             self.unet_dec.append(
-                UpConvBlock(in_channels, out_channels, cfg.pooling_kernel_size, cfg.pooling_stride, cfg.dropout, cfg.batch_norm)
+                UpConvBlock(in_channels, out_channels, cfg.pooling_stride, cfg.dropout, cfg.batch_norm)
             )
             in_channels = out_channels
 

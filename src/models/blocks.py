@@ -40,19 +40,13 @@ class UpConvBlock(nn.Module):
         self,
         in_channels: int,
         out_channels: int,
-        pooling_kernel_size: int,
-        pooling_stride: int,
+        scale_factor: int,
         dropout: float,
         batch_norm: bool,
     ):
         super(UpConvBlock, self).__init__()
         self.block = nn.Sequential(
-            nn.ConvTranspose2d(
-                in_channels,
-                in_channels,
-                kernel_size=pooling_kernel_size,
-                stride=pooling_stride,
-            ),
+            nn.Upsample(scale_factor=scale_factor, mode="bilinear", align_corners=False),
             ConvBlock(in_channels, out_channels, dropout, batch_norm),
         )
 
