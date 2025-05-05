@@ -52,14 +52,14 @@ class UNet(nn.Module):
 
         # Conditioning Layers
         self.t_mlps = nn.ModuleList(
-            MLP(1, all_channel_inputs[s]) for s in cfg.t_cond_stages
+            MLP(1, all_channel_inputs[s]) for s in cfg.t_cond_stages # Additive cond
         )
         self.act_mlps = nn.ModuleList(
-            MLP(cfg.action_dim * cfg.horizon, all_channel_inputs[s])
+            MLP(cfg.action_dim * cfg.horizon, 2 * all_channel_inputs[s]) # FiLm cond
             for s in cfg.act_cond_stages
         )
         self.obs_encs = nn.ModuleList(
-            ConvBlock(obs_cond_channels, obs_cond_channels, cfg.dropout, cfg.batch_norm)
+            ConvBlock(obs_cond_channels, obs_cond_channels, cfg.dropout, cfg.batch_norm) # Concat cond
             for _ in cfg.obs_cond_stages
         )
 
@@ -105,10 +105,10 @@ class UNet(nn.Module):
             cond_idx = self.act_cond_stage_to_idx[global_idx]
             act_mlp = self.act_mlps[cond_idx]
             context_acts = act_mlp(context_acts)
-            context_acts = context_acts.view(
-                context_acts.shape[0], context_acts.shape[1], 1, 1
-            )
-            x = x + context_acts
+            gamma, beta = context_acts.chunk(2, dim=1)
+            gamma = gamma.view(gamma.shape[0], gamma.shape[1], 1, 1)
+            beta = beta.view(beta.shape[0], beta.shape[1], 1, 1)
+            x = gamma * x + beta
         return x
 
     def forward(
