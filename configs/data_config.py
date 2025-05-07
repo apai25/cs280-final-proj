@@ -6,9 +6,11 @@ from typing import Tuple
 @dataclass
 class DataConfig:
     data_dir: Path = Path("data").resolve()
+    # data_dir: Path = Path("/nfs/kun2/datasets").resolve()
     dataset_name: str = "droid_100"
+    # dataset_name: str = "droid"
     camera: str = "wrist_image_left"
-    horizon: int = 4
+    horizon: int = 16
 
     action_dim: int = 7
     img_size: Tuple[int, int] = (64, 64)

@@ -9,7 +9,7 @@ class ModelConfig:
     img_channels: int  # set by Config
 
     # UNet config
-    hidden_channels: List[int] = field(default_factory=lambda: [128, 256, 512])
+    hidden_channels: List[int] = field(default_factory=lambda: [256, 512, 1024])
     bottleneck_channels: int = 1024
 
     dropout: float = 0.0
