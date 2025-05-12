@@ -61,6 +61,7 @@ class Trainer:
 
     def train(self):
         print("Starting training...")
+        print(torch.cuda.memory_summary())
         for ep in range(self.cfg.train.epochs):
             self.fm.train()
             self.ep = ep + 1
